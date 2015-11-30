@@ -1,0 +1,638 @@
+#!/usr/bin/python
+
+##
+## a script that parses kismet XML output
+##
+
+import sys
+import os
+import argparse
+import re
+import datetime
+import xml.etree.ElementTree as etree
+
+
+class Args(object):
+
+    ##
+    ## a command line argument parser class
+    ##
+
+    parser = argparse.ArgumentParser(description='Change the meta data of the target commit(s)')
+
+    parser.add_argument(
+        '--netxml', '-n', 
+        metavar='[NETXML]', 
+        dest='netxml', 
+        nargs=1, 
+        default=None,
+        help='netxml file output by kismet'
+    )
+
+    parser.add_argument(
+        '--gpsxml', '-g', 
+        metavar='[GPSXML]', 
+        dest='gpsxml', 
+        nargs=1, 
+        default=None,
+        help='gpsxml file output by kismet'
+    )
+
+    parser.add_argument(
+        '--outfile', '-o', 
+        metavar='[OUTFILE]', 
+        dest='outfile', 
+        nargs=1, 
+        default=None,
+        help='Name of the output file'
+    )
+
+    parser.add_argument(
+        '--verbose', '-v',
+        dest='verbose',
+        action='store_true',
+        default=None,
+        help='Generate verbose output'
+    )
+
+    def print_help(self):
+        self.parser.print_help()
+        return
+
+    def parse(self):
+        args = self.parser.parse_args()
+        return args
+
+
+def verb(verbose, s, err):
+    d = datetime.datetime.now()
+    if verbose:
+        m=''
+        if err:
+            if isinstance(s,(dict,list,tuple)):
+                for i in s:
+                    m = m + '[-] %s: \t%s: %s\n'%(d,i,s[i])
+            else: 
+                m = '[-] %s: %s\n'%(d,s)
+            sys.stderr.write(m)
+        else:
+            if isinstance(s,(dict,list,tuple)):
+                for i in s:
+                    m = m + '[+] %s: \t%s: %s\n'%(d,i,s[i])
+            else:
+                m = '[+] %s: %s\n'%(d,s)
+
+            sys.stdout.write(m)
+
+    return
+
+
+def parse_date_from_filename(file): 
+    ##
+    ## parse date from filename format, such as:
+    ##
+    ##      Kismet-20151114-23-50-32-1.netxml
+    ##  to:
+    ##
+    ##      Saturday 14 Nov 2015 23:50:32
+    ##
+    try:
+        basename = os.path.basename(file)
+        capturen = re.findall(r"[\d]{1,}[\.]", basename)
+        clean = basename.replace(capturen[0], "")
+        clean = re.sub(r"\D", "", clean)
+        struct = datetime.datetime.strptime(clean, "%Y%m%d%H%M%S")
+        prettydate = datetime.datetime.strftime(struct, "%A %d %b %Y %H:%M:%S")
+    except Exception, e:
+        prettydate = None
+
+    verb(verbose, 'Kismet NetXML ... date from filename: %s'%prettydate, False)
+    return prettydate
+
+
+def write_header(name, outfile):
+    header = """<?xml version='1.0' encoding='UTF-8'?>
+    <kml xmlns='http://earth.google.com/kml/2.0'>
+        <Folder><name>%s</name>"""%name
+    try:
+        outfile.write(header)
+    except Exception, e:
+        verb(verbose, 'ERROR: failed to write output file header: %s'%e, True)
+        return False
+
+    verb(verbose, 'Successfully wrote output file header', False)
+    return True
+
+
+def get_path_xml(gpsxml):
+
+    header = """
+    <Placemark>
+        <description>Route Taken</description>
+        <name>Route</name>
+        <visibility>1</visibility>
+        <open>0</open>
+        <Style>
+            <LineStyle>
+                <color>BB0000FF</color>
+                <width>4</width>
+            </LineStyle>
+        </Style>
+        <LineString>
+            <extrude>0</extrude>
+            <tessellate>1</tessellate>
+            <altitudeMode>clampedToGround</altitudeMode> 
+            <coordinates>"""
+
+    index = 0
+    prev = [0, 0]
+    coords = ''
+
+
+    with open(gpsxml) as g:
+
+        verb(verbose, 'Parsing Kismet GPSXML element tree', False)
+        tree = etree.parse(g)
+        root = tree.getroot()
+        for p in root.findall('gps-point'):
+            lat = p.get('lat')
+            lon = p.get('lon')
+
+            ##
+            ## discard identical readings
+            ##
+            if lat != prev[0] and lon != prev[1]:
+                coords += lon+","+lat+",0 "
+                prev[0] = lat
+                prev[1] = lon
+            #index += 1
+
+    footer = "</coordinates></LineString></Placemark>"
+    return ''.join([header, coords, footer])
+
+
+def get_lookat_xml(w):
+    lookat = """
+    <LookAt>
+        <longitude>%s</longitude>
+        <latitude>%s</latitude>
+        <range>100</range>
+        <tilt>54</tilt>
+        <heading>-35</heading>
+    </LookAt>""" % (w['gpsinfo']['peak_lon'], w['gpsinfo']['peak_lat'])
+
+    return lookat
+
+
+def get_cdata_xml(w):
+
+    if w.get('ssid') and w['ssid'].get('encryption'):
+        enc = w['ssid']['encryption']
+    else:
+        enc = 'None'
+
+    ##
+    ## TODO: loop thru encrytion and freq
+    ##
+    cdata = """
+    <![CDATA[
+        First-seen: %s<br>
+        Last-seen: %s<br><hr>
+        BSSID: %s<br>
+        Manufacturer: %s<br>
+        Channel: %s<br>
+        Frequency: %sMhz<br>
+        Encryption: %s<br>
+        Min-Signal: %s dBm<br>
+        Max-Signal: %s dBm<br><hr>
+        <b>GPS Coordinates</b><br>
+        Avg lat/lon: %s, %s
+        <br><b>Captured Packets</b><br>
+        LLC: %s<br>
+        data: %s<br>
+        crypt: %s<br>
+        total: %s<br>
+        fragments: %s<br>
+        retries: %s<br>
+    ]]>""" %  ( w['first_time'], 
+                w['last_time'], 
+                w['bssid'], 
+                w['manuf'], 
+                w['channel'], 
+                w['freq'], 
+                enc,
+                w['snr_info']['min_signal_dbm'],
+                w['snr_info']['max_signal_dbm'],
+                w['gpsinfo']['peak_lat'],
+                w['gpsinfo']['peak_lon'],
+                w['packets']['llc'],
+                w['packets']['data'],
+                w['packets']['crypt'],
+                w['packets']['total'],
+                w['packets']['fragments'],
+                w['packets']['retries'])
+
+    return cdata
+
+
+def get_icon_xml(w):
+    ##
+    ## look for:
+    ##      None
+    ##      WEP
+    ##      WPA
+    ##
+    if w.get('ssid') and w['ssid'].get('encryption'):
+        enc = w['ssid']['encryption']
+        ##
+        ## TODO: icon for networks with clients
+        ##
+        icon = None
+        for e in enc:
+            if 'None' in e:
+                icon = "node_open.png"
+                break
+            elif 'WEP' in e:
+                icon = "node_wep.png"
+                break
+            elif 'WPA' in e:
+                icon = "node_wpa.png"            
+                break
+    else:
+        icon = "node_open.png"
+
+    return '<Style><Icon>%s</Icon></Style>'%icon
+
+
+def get_placemark_xml(w):
+
+    if wilan.get('ssid') and wilan['ssid'].get('essid'):
+        if wilan['ssid']['essid'] == 'cloaked':
+            essid = wilan['bssid']
+        else:
+            essid = wilan['ssid']['essid']        
+    else:
+        essid = wilan['bssid']
+
+    placemark = """
+    <Placemark>
+        <name>%s</name>
+        %s
+        <visibility>1</visibility>
+        <open>0</open>
+        %s
+        <description>%s</description>
+        <Point>
+            <altitudeMode>clampedToGround</altitudeMode>
+            <extrude>0</extrude>
+            <tessellate>0</tessellate>
+            <coordinates>%s,%s,0</coordinates>
+        </Point>
+    </Placemark>\n""" % (   essid,
+                            get_icon_xml(w), 
+                            get_lookat_xml(w),
+                            get_cdata_xml(w),
+                            w['gpsinfo']['peak_lon'], 
+                            w['gpsinfo']['peak_lat'])
+
+    return placemark
+
+
+def write_wilan(wilan, outfile):
+
+    ##
+    ## open element
+    ##
+    folder_open = """<Folder>\n"""
+
+    ##
+    ## body
+    ##
+    if wilan.get('ssid') is not None and wilan['ssid'].get('essid'):
+        if wilan['ssid']['essid'] == 'cloaked':
+            id = 'Cloaked: %s'%wilan['bssid']
+
+        else:
+            id = '%s: %s' % (wilan['ssid']['essid'], wilan['bssid'])        
+    else:
+        id = wilan['bssid']
+
+    name = '<name> %s </name>'%id
+    lookat = get_lookat_xml(wilan)
+    description = '\n<description>%s</description>\n'%get_cdata_xml(wilan)
+    placemark = get_placemark_xml(wilan)
+
+    ##
+    ## close element
+    ##
+    folder_close = """\n</Folder>\n"""
+
+    try:
+        outfile.write(''.join([ folder_open, 
+                                name, 
+                                lookat, 
+                                description,
+                                placemark,
+                                folder_close]))
+    except Exception, e:
+        verb(verbose, 'ERROR: failed to write wireless network %s: %s'%(id, e), True)
+        return False
+
+    verb(verbose, 'Successfully wrote wireless network %s'%id, False)
+    return True
+
+
+def parse_card_source(root):
+    n = 0
+    card_source = {}
+    for c in root.findall('card-source'):
+        ##
+        ## c.tag == card-source
+        ## c.attrib == attributes of the card-source element
+        ##
+        card_source[n] = {}
+        card_source[n]['source'] = c.find('card-source').text              
+        card_source[n]['name'] = c.find('card-name').text
+        card_source[n]['interface'] = c.find('card-interface').text
+        card_source[n]['type'] = c.find('card-type').text
+        card_source[n]['packets'] = c.find('card-packets').text
+        card_source[n]['hop'] = c.find('card-hop').text
+        card_source[n]['channels'] = c.find('card-channels').text
+
+    return card_source
+
+
+def parse_wilan(w):
+    ##
+    ## w.tag == wireless-network
+    ## w.attrib == attributes of the wireless-network element
+    ##
+    wilan = {}
+    wilan['first_time'] = w.get('first-time')
+    wilan['last_time'] =  w.get('last-time')
+    wilan['net_num'] = w.get('number')
+    wilan['type'] = w.get('type')
+    wilan['bssid'] =  w.find('BSSID').text
+    wilan['manuf'] = w.find('manuf').text
+    wilan['channel'] = w.find('channel').text
+    wilan['max_seen_rate'] = w.find('maxseenrate').text
+    wilan['bsstimestamp'] = w.find('bsstimestamp').text
+    wilan['cdp_device'] = w.find('cdp-device').text
+    wilan['cdp_port_id'] = w.find('cdp-portid').text
+    wilan['data_size'] = w.find('datasize').text
+
+    wilan['freq'] = parse_freq(w)
+    wilan['clients'] = parse_clients(w)
+    wilan['seen_card'] = parse_seen_card(w.find('seen-card'))
+
+    if w.find('SSID') is not None:
+        wilan['ssid'] =  parse_ssid(w.find('SSID'))
+
+    wilan['packets'] = parse_packets(w.find('packets'))
+    wilan['gpsinfo'] = parse_gps(w.find('gps-info'))
+    wilan['snr_info'] = parse_snr_info(w.find('snr-info'))
+
+    return wilan
+
+
+def parse_gps(g):
+    try:
+        gps = {}
+        gps['min_lat'] = g.find('min-lat').text
+        gps['min_lon'] = g.find('min-lon').text
+        gps['min_alt'] = g.find('min-alt').text
+        gps['min_spd'] = g.find('min-spd').text
+        gps['max_lat'] = g.find('max-lat').text
+        gps['max_lon'] = g.find('max-lon').text
+        gps['max_alt'] = g.find('max-alt').text
+        gps['max_spd'] = g.find('max-spd').text
+        gps['peak_lat'] = g.find('peak-lat').text
+        gps['peak_lon'] = g.find('peak-lon').text
+        gps['peak_alt'] = g.find('peak-alt').text
+        gps['avg_lat'] = g.find('avg-lat').text
+        gps['avg_lon'] = g.find('avg-lon').text
+        gps['avg_alt'] = g.find('avg-alt').text
+
+    except Exception, e:
+        verb(verbose, 'ERROR: failed to parse gpsinfo: %s'%e, True)
+        pass
+
+    return gps
+
+
+def parse_packets(p):
+    try:
+        packets = {}
+        packets['llc'] = p.find('LLC').text
+        packets['data'] = p.find('data').text
+        packets['crypt'] = p.find('crypt').text
+        packets['total'] = p.find('total').text
+        packets['fragments'] = p.find('fragments').text
+        packets['retries'] = p.find('retries').text
+
+    except Exception, e:
+        verb(verbose, 'ERROR: failed to parse packet info: %s'%e, True)
+        pass
+
+    return packets
+
+
+def parse_ssid(s):
+
+    try:
+        ssid = {}
+        ssid['type'] = s.find('type').text
+        ssid['max-rate'] = s.find('max-rate').text
+        ssid['packets'] = s.find('packets').text
+        ssid['beaconrate'] = s.find('beaconrate').text
+
+        if s.find('essid') is not None and s.find('essid').get('cloaked') == 'false':
+            ssid['essid'] = s.find('essid').text
+        else:
+            ssid['essid'] = 'cloaked'
+
+        ssid['encryption'] = {}
+        for enc in s.findall('encryption'):
+            ssid['encryption'][enc.text] = 'True'
+
+    except Exception, e:
+        verb(verbose, 'ERROR: failed to parse ssid info: %s'%e, True)
+        return None
+
+    return ssid
+
+
+def parse_freq(w):
+    try:
+        freq = {}
+        for f in w.findall('freqmhz'):
+            freq[f.text] = True
+
+    except Exception, e:
+        verb(verbose, 'ERROR: failed to parse frequency info: %s'%e, True)
+        pass
+
+    return freq
+
+
+def parse_seen_card(s):
+    try:
+        seen_card = {}
+        seen_card['uuid'] = s.find('seen-uuid').text
+        seen_card['time'] = s.find('seen-time').text
+        seen_card['packets'] = s.find('seen-packets').text
+
+    except Exception, e:
+        verb(verbose, 'ERROR: failed to parse seen card info: %s'%e, True)
+        pass
+
+    return seen_card
+
+
+def parse_snr_info(s):
+    try:
+        snr_info = {}
+        snr_info['last_signal_dbm'] = s.find('last_signal_dbm').text
+        snr_info['last_noise_dbm'] = s.find('last_noise_dbm').text
+        snr_info['last_signal_rssi'] = s.find('last_signal_rssi').text
+        snr_info['last_noise_rssi'] = s.find('last_noise_rssi').text
+        snr_info['min_signal_dbm'] = s.find('min_signal_dbm').text
+        snr_info['min_noise_dbm'] = s.find('min_noise_dbm').text
+        snr_info['min_signal_rssi'] = s.find('min_signal_rssi').text
+        snr_info['min_noise_rssi'] = s.find('min_noise_rssi').text
+        snr_info['max_signal_dbm'] = s.find('max_signal_dbm').text
+        snr_info['max_noise_dbm'] = s.find('max_noise_dbm').text
+        snr_info['max_signal_rssi'] = s.find('max_signal_rssi').text
+        snr_info['max_noise_rssi'] = s.find('max_noise_rssi').text
+
+    except Exception, e:
+        verb(verbose, 'ERROR: failed to parse snr info: %s'%e, True)
+        pass
+
+    return snr_info
+
+
+def parse_clients(w):
+    if w.find('wireless-client') is not None:
+        try:
+            clients = {}
+            for c in w.findall('wireless-client'):
+                n = c.get('number')
+                clients[n] = {}
+                clients[n]['first_time'] = c.get('first-time')
+                clients[n]['last_time'] =  c.get('last-time')
+                clients[n]['type'] = c.get('type')
+                clients[n]['client_mac'] = c.find('client-mac').text
+                clients[n]['client_manuf'] = c.find('client-manuf').text
+                clients[n]['channel'] = c.find('channel').text
+                clients[n]['max_seen_rate'] = c.find('maxseenrate').text
+                clients[n]['data_size'] = c.find('datasize').text
+                clients[n]['freq'] = parse_freq(c)
+                clients[n]['packets'] = parse_packets(c.find('packets'))
+                clients[n]['gpsinfo'] = parse_gps(c.find('gps-info'))
+                clients[n]['snr_info'] = parse_snr_info(c.find('snr-info'))
+
+                if c.find('SSID') is not None:
+                    clients[n]['ssid'] =  parse_ssid(c.find('SSID'))
+
+        except Exception, e:
+            verb(verbose, 'ERROR: failed to parse client info: %s'%e, True)
+            pass
+
+        return clients
+
+    else:
+        return None
+
+##
+## main
+##
+if __name__ == '__main__':
+
+    a = Args()
+    args = a.parse()
+
+
+                ##
+    w_count=0   ## count of networks found
+                ##
+
+    if args.verbose:
+        verbose = True
+    else:
+        verbose = False
+
+    warpath = False
+    if args.gpsxml:
+        warpath = True
+        path_xml = get_path_xml(args.gpsxml[0])
+
+    if args.netxml:
+
+        prettyname = parse_date_from_filename(args.netxml[0])
+
+        if args.outfile:
+            outfile = args.outfile[0]
+        else:
+            d = os.path.dirname(args.netxml[0])
+            o = os.path.basename(args.netxml[0])[:-7] + ".kml"
+            outfile = os.path.join(d, o)
+
+        verb(verbose, 'Output will be written to %s'%outfile, False)
+
+        with open(args.netxml[0]) as f:
+
+            verb(verbose, 'Parsing Kismet NetXML element tree', False)
+            tree = etree.parse(f)
+            root = tree.getroot()
+
+            with open(outfile, 'w,a') as o:
+                write_header(prettyname, o)
+
+                ##
+                ## if gpsxml file is provided ... generate warpath
+                ##
+                if warpath:
+                    o.write(path_xml)
+
+                card_source = parse_card_source(root)
+                ##
+                ## TODO: write card source somewhere
+                ##
+
+                ##
+                ## wrap wireless network overlay in folder
+                ## allows collapse as single element
+                ##
+                w_header = """
+                <Folder>
+                    <description>Network Overlay</description>
+                    <name>Network Overlay</name>
+                    <visibility>1</visibility>
+                    <open>0</open>"""
+                o.write(w_header)
+                for w in root.findall('wireless-network'):
+                    ##
+                    ## w.tag == wireless-network
+                    ## w.attrib == attributes of the wireless-network element
+                    ##
+                    wilan = parse_wilan(w)
+                    ##
+                    ## write wilan here
+                    ##
+                    write_wilan(wilan, o)
+                    w_count += 1
+
+                w_footer = "</Folder>"
+                o.write(w_footer)
+                ##
+                ## append footer
+                ##
+                o.write("</Folder></kml>")
+
+        verb(verbose, 'Found %s wireless networks'%w_count, False)
+
+    else:
+        verb(verbose, 'Error: No NetXML file provided', True)
+        a.print_help()
+        exit(1)

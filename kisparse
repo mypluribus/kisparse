@@ -114,6 +114,7 @@ def write_header(name, outfile):
     header = """<?xml version='1.0' encoding='UTF-8'?>
     <kml xmlns='http://earth.google.com/kml/2.0'>
         <Folder><name>%s</name>"""%name
+
     try:
         outfile.write(header)
     except Exception, e:
@@ -148,7 +149,6 @@ def get_path_xml(gpsxml):
     prev = [0, 0]
     coords = ''
 
-
     with open(gpsxml) as g:
 
         verb(verbose, 'Parsing Kismet GPSXML element tree', False)
@@ -157,7 +157,6 @@ def get_path_xml(gpsxml):
         for p in root.findall('gps-point'):
             lat = p.get('lat')
             lon = p.get('lon')
-
             ##
             ## discard identical readings
             ##
@@ -165,7 +164,6 @@ def get_path_xml(gpsxml):
                 coords += lon+","+lat+",0 "
                 prev[0] = lat
                 prev[1] = lon
-            #index += 1
 
     footer = "</coordinates></LineString></Placemark>"
     return ''.join([header, coords, footer])
@@ -258,6 +256,7 @@ def get_icon_xml(w):
             elif 'WPA' in e:
                 icon = "node_wpa.png"            
                 break
+
     else:
         icon = "node_open.png"
 
@@ -321,10 +320,6 @@ def write_wilan(wilan, outfile):
     lookat = get_lookat_xml(wilan)
     description = '\n<description>%s</description>\n'%get_cdata_xml(wilan)
     placemark = get_placemark_xml(wilan)
-
-    ##
-    ## close element
-    ##
     folder_close = """\n</Folder>\n"""
 
     try:
@@ -334,6 +329,7 @@ def write_wilan(wilan, outfile):
                                 description,
                                 placemark,
                                 folder_close]))
+
     except Exception, e:
         verb(verbose, 'ERROR: failed to write wireless network %s: %s'%(id, e), True)
         return False
@@ -438,7 +434,6 @@ def parse_packets(p):
 
 
 def parse_ssid(s):
-
     try:
         ssid = {}
         ssid['type'] = s.find('type').text
@@ -611,6 +606,7 @@ if __name__ == '__main__':
                     <visibility>1</visibility>
                     <open>0</open>"""
                 o.write(w_header)
+
                 for w in root.findall('wireless-network'):
                     ##
                     ## w.tag == wireless-network

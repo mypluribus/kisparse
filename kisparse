@@ -111,7 +111,7 @@ def parse_date_from_filename(file):
 
 
 def write_header(name, outfile):
-    overlay = """
+    overlay_example = """
     <ScreenOverlay>
         <name>%s</name>
         <visibility>1</visibility>
@@ -122,6 +122,8 @@ def write_header(name, outfile):
         <size x="0" y="0" xunits="fraction" yunits="fraction"/>
     </ScreenOverlay>
     """%name
+
+    overlay = ''
 
     header = """<?xml version='1.0' encoding='UTF-8'?>
     <kml xmlns='http://earth.google.com/kml/2.0'>    
@@ -243,7 +245,7 @@ def get_cdata_xml(w):
                 w['packets']['crypt'],
                 w['packets']['total'],
                 w['packets']['fragments'],
-                w['packets']['retries'])
+                w['packets']['retries'] )
 
     return cdata
 
@@ -307,7 +309,7 @@ def get_placemark_xml(w):
                             get_lookat_xml(w),
                             get_cdata_xml(w),
                             w['gpsinfo']['peak_lon'], 
-                            w['gpsinfo']['peak_lat'])
+                            w['gpsinfo']['peak_lat']  )
 
     return placemark
 
@@ -561,7 +563,6 @@ if __name__ == '__main__':
 
     a = Args()
     args = a.parse()
-
 
                 ##
     w_count=0   ## count of networks found

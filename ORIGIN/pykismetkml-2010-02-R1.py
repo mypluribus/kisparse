@@ -1,5 +1,22 @@
 #!/usr/bin/python
 
+# Version 2010-02-R1
+# pykismetkml@gmail.com
+# http://code.google.com/p/pykismetkml
+
+# USAGE: pykismetkml.py -i inputfile.netxml [-g gpsfile.gpsxml] [-n alternatename] [-o outputfile.kml]
+# HELP: pykismetkml.py -h
+
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
 import datetime, optparse, os, re, sys
 import xml.dom.minidom
 from xml.dom.minidom import Node
@@ -176,157 +193,67 @@ def parse(filename):
             netdetails, tags = [], ["BSSID", "channel", "freqmhz", "manuf"]
             for x in tags:
                 netdetails.append(ext_data(networks, x, index))
-
-
-            fullstr += """\n<Folder>\n"""
-            fullstr += """    <name>%s</name>""" % essid
-            fullstr += """
-    <LookAt>
-        <longitude>%s</longitude>
-        <latitude>%s</latitude>
-        <range>100</range>
-        <tilt>54</tilt>
-        <heading>-35</heading>
-    </LookAt>""" % (plotlon, plotlat)
-
-
-            cdata = """
-    <![CDATA[
-        First-seen:%s<br>
-        Last-seen:%s<br><hr>
-        BSSID:%s<br>
-        Manufacturer:%s<br>
-        Channel:%s<br>
-        Frequency:%sMhz<br>
-        Encryption:%s<br>
-        Min-Signal:%s dBm<br>
-        Max-Signal:%s dBm<br><hr>
-        <b>GPS Coordinates</b><br>
-        Avg lat/lon: %s, %s
-        <br><b>Captured Packets</b><br>
-        LLC:%s<br>
-        data:%s<br>
-        crypt:%s<br>
-        total:%s<br>
-        fragments:%s<br>
-        retries:%s<br>
-    ]]>""" %  (firstseen, lastseen, netdetails[0], netdetails[3], netdetails[1], netdetails[2], enc, minsignal, maxsignal, plotlat, plotlon, packets[0], packets[1], packets[2], packets[3], packets[4], packets[5])
-
-
-
-            fullstr += """
-    <description><![CDATA[
-        First-seen:%s<br>
-        Last-seen:%s<br><hr>
-        BSSID:%s<br>
-        Manufacturer:%s<br>
-        Channel:%s<br>
-        Frequency:%sMhz<br>
-        Encryption:%s<br>
-        Min-Signal:%s dBm<br>
-        Max-Signal:%s dBm<br><hr>
-        <b>GPS Coordinates</b><br>
-        Avg lat/lon: %s, %s
-        <br><b>Captured Packets</b><br>
-        LLC:%s<br>
-        data:%s<br>
-        crypt:%s<br>
-        total:%s<br>
-        fragments:%s<br>
-        retries:%s<br>
-    ]]></description>\n""" %  (firstseen, lastseen, netdetails[0], netdetails[3], netdetails[1], netdetails[2], enc, minsignal, maxsignal, plotlat, plotlon, packets[0], packets[1], packets[2], packets[3], packets[4], packets[5])
-
-
-            fullstr += """
-    <Placemark>
-        <name>%s</name>
-        <description>%s</description>
-        <visibility>1</visibility>
-        <open>0</open>
-
-        <LookAt>
-            <longitude>%s</longitude>
-            <latitude>%s</latitude>
-            <range>100</range>
-            <tilt>54</tilt>
-            <heading>-35</heading>
-        </LookAt>
-                           
-        %s
-
-        <Point>
-            <altitudeMode>clampedToGround</altitudeMode>
-            <extrude>0</extrude>
-            <tessellate>0</tessellate>
-            <coordinates>%s,%s,0</coordinates>
-        </Point>
-    </Placemark>\n""" % (essid,cdata,plotlon,plotlat, icon, plotlon, plotlat)
-
-            fullstr += """</Folder>\n\n\n"""
-
-##
-##
-##            fullstr += """<Folder>
-##                                <name>%s</name>
-##                            
-##                                    <LookAt>
-##                                        <longitude>%s</longitude>
-##                                        <latitude>%s</latitude>
-##                                        <range>100</range>
-##                                        <tilt>54</tilt>
-##                                        <heading>-35</heading>
-##                                    </LookAt>
-##                            
-##                            <description><![CDATA[
-##                                            First-seen:%s<br>
-##                                            Last-seen:%s<br><hr>
-##                                            BSSID:%s<br>
-##                                            Manufacturer:%s<br>
-##                                            Channel:%s<br>
-##                                            Frequency:%sMhz<br>
-##                                            Encryption:%s<br>
-##                                            Min-Signal:%s dBm<br>
-##                                            Max-Signal:%s dBm<br><hr>
-##                                            <b>GPS Coordinates</b><br>
-##                                            Avg lat/lon: %s, %s
-##                                            <b>Captured Packets</b><br>
-##                                            LLC:%s<br>
-##                                            data:%s<br>
-##                                            crypt:%s<br>
-##                                            total:%s<br>
-##                                            fragments:%s<br>
-##                                            retries:%s<br>
-##                                            ]]></description>
-##                                <Placemark>
-##                                    <name>%s</name>
-##                                    <description>%s</description>
-##                                    <visibility>1</visibility>
-##                                    <open>0</open>
-##                                    
-##                                    <LookAt>
-##                                        <longitude>%s</longitude>
-##                                        <latitude>%s</latitude>
-##                                        <range>100</range>
-##                                        <tilt>54</tilt>
-##                                        <heading>-35</heading>
-##                                    </LookAt>
-##                                                       
-##                                    %s
-##                                    
-##                                    <Point>
-##                                        <altitudeMode>clampedToGround</altitudeMode>
-##                                        <extrude>0</extrude>
-##                                        <tessellate>0</tessellate>
-##                                        <coordinates>%s,%s,0</coordinates>
-##                                    </Point>
-##                                </Placemark>
-##                            </Folder>\n\n\n""" % (essid, plotlon, plotlat, firstseen, lastseen, netdetails[0], \
-##                            netdetails[3], netdetails[1], netdetails[2], enc, minsignal, maxsignal, \
-##                            plotlat, plotlon, packets[0], packets[1], \
-##                            packets[2], packets[3], packets[4], packets[5], essid,"Avg lon/lat",plotlon,plotlat, \
-##                            icon, plotlon, plotlat)
-##
-##                            
+            
+            fullstr += """<Folder>
+                                <name>%s</name>
+                            
+                                    <LookAt>
+                                        <longitude>%s</longitude>
+                                        <latitude>%s</latitude>
+                                        <range>100</range>
+                                        <tilt>54</tilt>
+                                        <heading>-35</heading>
+                                    </LookAt>
+                            
+                            <description><![CDATA[
+                                            First-seen:%s<br>
+                                            Last-seen:%s<br><hr>
+                                            BSSID:%s<br>
+                                            Manufacturer:%s<br>
+                                            Channel:%s<br>
+                                            Frequency:%sMhz<br>
+                                            Encryption:%s<br>
+                                            Min-Signal:%s dBm<br>
+                                            Max-Signal:%s dBm<br><hr>
+                                            <b>GPS Coordinates</b><br>
+                                            Avg lat/lon: %s, %s
+                                            <b>Captured Packets</b><br>
+                                            LLC:%s<br>
+                                            data:%s<br>
+                                            crypt:%s<br>
+                                            total:%s<br>
+                                            fragments:%s<br>
+                                            retries:%s<br>
+                                            ]]></description>
+                                <Placemark>
+                                    <name>%s</name>
+                                    <description>%s</description>
+                                    <visibility>1</visibility>
+                                    <open>0</open>
+                                    
+                                    <LookAt>
+                                        <longitude>%s</longitude>
+                                        <latitude>%s</latitude>
+                                        <range>100</range>
+                                        <tilt>54</tilt>
+                                        <heading>-35</heading>
+                                    </LookAt>
+                                                       
+                                    %s
+                                    
+                                    <Point>
+                                        <altitudeMode>clampedToGround</altitudeMode>
+                                        <extrude>0</extrude>
+                                        <tessellate>0</tessellate>
+                                        <coordinates>%s,%s,0</coordinates>
+                                    </Point>
+                                </Placemark>
+                            </Folder>\n\n\n""" % (essid, plotlon, plotlat, firstseen, lastseen, netdetails[0], \
+                            netdetails[3], netdetails[1], netdetails[2], enc, minsignal, maxsignal, \
+                            plotlat, plotlon, packets[0], packets[1], \
+                            packets[2], packets[3], packets[4], packets[5], essid,"Avg lon/lat",plotlon,plotlat, \
+                            icon, plotlon, plotlat)
+                            
             
             
         index += 1
@@ -336,4 +263,5 @@ def parse(filename):
 
 parsed = parse(filename)
 print("Generated "+outputfile+"(",apcount,"AP's written)")
+
 

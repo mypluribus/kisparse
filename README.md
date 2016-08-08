@@ -21,6 +21,6 @@
 
 I thought it would be nice to visualize the output of Kismet.
 
-I found the beginnings of this code somewhere on Google Code, and I think it is attributed to this guy: https://github.com/grutz/pykismetkml (the node graphics are most definately his ... at least I think they are)
+I found the beginnings of this code somewhere on Google Code, and I think it is attributed to this guy: https://github.com/grutz/pykismetkml (the node graphics are most definately his ... at least I think they are).  The original code is found in the ORIGIN folder.
 
 Regardless, it's been a while since I originally found it, and I've made some changes (improvements?) here, so ... that's the best effort I'm going to make at attribution.
